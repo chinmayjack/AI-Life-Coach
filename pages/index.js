@@ -1,211 +1,106 @@
-// pages/index.js
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
-  const [persona, setPersona] = useState("General"); // default persona
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
-  const [scenario, setScenario] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const bottomRef = useRef(null);
+  const [persona, setPersona] = useState("General");
+  const messagesEndRef = useRef(null);
 
+  // Auto-scroll to the bottom whenever messages change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleAnalyze = async () => {
-    if (!scenario.trim()) return;
-    setLoading(true);
-    setError("");
+  // Handle sending message
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: scenario }]);
-    setScenario("");
+    // Add user's message
+    setMessages((prev) => [...prev, { role: "user", text: input }]);
 
-    try {
-      const resp = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario }),
-      });
+    // Clear input
+    setInput("");
 
-      const data = await resp.json();
+    // Send to API
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario: input, persona }),
+    });
 
-      if (resp.ok) {
-        setMessages((prev) => [...prev, { role: "ai", content: data.analysis }]);
-      } else {
-        setError(data.error || "Unknown error");
-      }
-    } catch (err) {
-      console.error("Fetch error:", err);
-      setError("Failed to fetch AI response");
-    } finally {
-      setLoading(false);
+    if (!res.ok) return;
+
+    // Stream AI response
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let aiText = "";
+    setMessages((prev) => [...prev, { role: "ai", text: "" }]); // placeholder
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      aiText += decoder.decode(value);
+      setMessages((prev) =>
+        prev.map((msg, idx) =>
+          idx === prev.length - 1 ? { ...msg, text: aiText } : msg
+        )
+      );
     }
   };
 
   return (
-    <div className="page">
-      <div className="app-container">
-        <h1>💡 Life Coach AI</h1>
+    <div className="min-h-screen bg-gradient-to-b from-indigo-100 via-purple-100 to-pink-100 flex flex-col p-4">
+      <h1 className="text-3xl font-bold text-center mb-4">AI Life Context Coach</h1>
 
-        <div className="chat-window">
-          {messages.map((msg, idx) => (
-            <div key={idx} className={`chat-bubble ${msg.role}`}>
-              {msg.content}
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        {error && <p className="error">{error}</p>}
-        <div className="mb-4">
-          <label className="block text-gray-700 font-semibold mb-1">
-            Choose Coach Persona:
-          </label>
-          <select
-            value={persona}
-            onChange={(e) => setPersona(e.target.value)}
-            className="p-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
-            <option value="General">General Coach</option>
-            <option value="Career">Career Coach</option>
-            <option value="Finance">Finance Coach</option>
-            <option value="Health">Health Coach</option>
-          </select>
-        </div>
-        <div className="input-area">
-          <textarea
-            rows={2}
-            placeholder="Type your situation..."
-            value={scenario}
-            onChange={(e) => setScenario(e.target.value)}
-          />
-          <button onClick={handleAnalyze} disabled={loading}>
-            {loading ? "Thinking..." : "Send"}
-          </button>
-        </div>
+      {/* Persona Selector */}
+      <div className="mb-4 flex justify-center">
+        <select
+          value={persona}
+          onChange={(e) => setPersona(e.target.value)}
+          className="p-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        >
+          <option value="General">General Coach</option>
+          <option value="Career">Career Coach</option>
+          <option value="Finance">Finance Coach</option>
+          <option value="Health">Health Coach</option>
+        </select>
       </div>
 
-      <style jsx>{`
-        body, html {
-          margin: 0;
-          padding: 0;
-        }
+      {/* Chat Window */}
+      <div className="flex-1 overflow-y-auto mb-4 space-y-3 p-4 bg-white rounded-2xl shadow-lg">
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`max-w-[75%] p-3 rounded-2xl ${
+              msg.role === "user"
+                ? "bg-indigo-500 text-white ml-auto"
+                : "bg-gray-200 text-gray-900"
+            }`}
+          >
+            {msg.text}
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
 
-        .page {
-          height: 100vh;
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          font-family: 'Inter', sans-serif;
-        }
-
-        .app-container {
-          width: 600px;
-          max-width: 90%;
-          background: #1f1f2f;
-          border-radius: 20px;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-          padding: 20px;
-          display: flex;
-          flex-direction: column;
-        }
-
-        h1 {
-          text-align: center;
-          color: #fff;
-          margin-bottom: 20px;
-          font-weight: 600;
-        }
-
-        .chat-window {
-          flex: 1;
-          overflow-y: auto;
-          padding: 15px;
-          background: #2b2b3b;
-          border-radius: 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          min-height: 350px;
-          max-height: 500px;
-        }
-
-        .chat-bubble {
-          padding: 12px 18px;
-          border-radius: 20px;
-          max-width: 80%;
-          word-wrap: break-word;
-          font-size: 15px;
-          box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        }
-
-        .chat-bubble.user {
-          align-self: flex-end;
-          background: linear-gradient(135deg, #6a11cb, #2575fc);
-          color: #fff;
-          border-bottom-right-radius: 4px;
-        }
-
-        .chat-bubble.ai {
-          align-self: flex-start;
-          background: linear-gradient(135deg, #434343, #5e5e6a);
-          color: #f0f0f0;
-          border-bottom-left-radius: 4px;
-        }
-
-        .input-area {
-          display: flex;
-          margin-top: 15px;
-          gap: 10px;
-        }
-
-        textarea {
-          flex: 1;
-          padding: 12px;
-          border-radius: 16px;
-          border: none;
-          background: #2b2b3b;
-          color: #fff;
-          font-size: 16px;
-          resize: none;
-          outline: none;
-        }
-
-        textarea::placeholder {
-          color: #aaa;
-        }
-
-        button {
-          background: linear-gradient(135deg, #6a11cb, #2575fc);
-          border: none;
-          border-radius: 16px;
-          padding: 0 25px;
-          font-weight: bold;
-          color: white;
-          cursor: pointer;
-          transition: all 0.3s ease;
-        }
-
-        button:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-        }
-
-        button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .error {
-          color: #ff6b6b;
-          margin-top: 10px;
-          text-align: center;
-        }
-      `}</style>
+      {/* Input Area */}
+      <div className="flex space-x-2">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          className="flex-1 p-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+          rows={2}
+          placeholder="Describe your scenario..."
+        />
+        <button
+          onClick={handleSubmit}
+          className="px-4 py-2 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-600 transition"
+        >
+          Send
+        </button>
+      </div>
     </div>
   );
 }
