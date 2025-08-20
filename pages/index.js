@@ -2,6 +2,9 @@
 import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
+  const [persona, setPersona] = useState("General"); // default persona
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
   const [scenario, setScenario] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
