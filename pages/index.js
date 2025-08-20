@@ -60,7 +60,21 @@ export default function Home() {
         </div>
 
         {error && <p className="error">{error}</p>}
-
+        <div className="mb-4">
+          <label className="block text-gray-700 font-semibold mb-1">
+            Choose Coach Persona:
+          </label>
+          <select
+            value={persona}
+            onChange={(e) => setPersona(e.target.value)}
+            className="p-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          >
+            <option value="General">General Coach</option>
+            <option value="Career">Career Coach</option>
+            <option value="Finance">Finance Coach</option>
+            <option value="Health">Health Coach</option>
+          </select>
+        </div>
         <div className="input-area">
           <textarea
             rows={2}
