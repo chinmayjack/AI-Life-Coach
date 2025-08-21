@@ -1,55 +1,59 @@
-// pages/api/analyze.js
 import OpenAI from "openai";
+import { PrismaClient } from "@prisma/client";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") return res.status(405).end();
+
+  const { scenario, persona } = req.body;
+
+  // 1. Create conversation row
+  const conversation = await prisma.conversation.create({
+    data: { persona },
+  });
+
+  // 2. Save user message
+  await prisma.message.create({
+    data: {
+      role: "user",
+      content: scenario,
+      conversationId: conversation.id,
+    },
+  });
+
+  // 3. Stream AI response
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: `You are acting as a ${persona} coach.` },
+      { role: "user", content: scenario },
+    ],
+    stream: true,
+  });
+
+  res.writeHead(200, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Transfer-Encoding": "chunked",
+  });
+
+  let fullResponse = "";
+
+  for await (const chunk of completion) {
+    const content = chunk.choices[0]?.delta?.content || "";
+    res.write(content);
+    fullResponse += content;
   }
 
-  try {
-    const { scenario, persona } = req.body;
+  // 4. Save AI response
+  await prisma.message.create({
+    data: {
+      role: "assistant",
+      content: fullResponse,
+      conversationId: conversation.id,
+    },
+  });
 
-    if (!scenario || !persona) {
-      return res.status(400).json({ error: "Missing scenario or persona" });
-    }
-
-    // 🔹 Dynamically build system prompt with persona
-    const systemPrompt = `You are an AI Life Context Coach. 
-Persona: ${persona}.
-Adapt your tone, style, and advice based on this persona.
-Always provide thoughtful, supportive, and actionable guidance.`;
-
-    // Set headers for streaming response
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    });
-
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: scenario },
-      ],
-      stream: true,
-    });
-
-    // 🔹 Stream chunks back to frontend
-    for await (const chunk of completion) {
-      const token = chunk.choices[0]?.delta?.content || "";
-      if (token) {
-        res.write(token);
-      }
-    }
-
-    res.end();
-  } catch (err) {
-    console.error("Error in /api/analyze:", err);
-    res.status(500).json({ error: "Something went wrong." });
-  }
+  res.end();
 }
