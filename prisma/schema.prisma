@@ -8,6 +8,7 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
+<<<<<<< HEAD
 
 model Scenario {
   id        Int      @id @default(autoincrement())
@@ -22,4 +23,20 @@ model User {
   name      String
   email     String   @unique
   createdAt DateTime @default(now())
+=======
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  persona   String
+  messages  Message[]
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  role           String   // "user" or "assistant"
+  content        String
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  createdAt      DateTime @default(now())
+>>>>>>> c85c293bce016992bcbb4d5e0baaeb2192f0f43d
 }
