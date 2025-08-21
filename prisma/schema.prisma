@@ -1,8 +1,25 @@
+// prisma/schema.prisma
+
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "sqlite" // Use "postgresql" for production
+  url      = env("DATABASE_URL") // Local: file:./dev.db
 }
 
 generator client {
   provider = "prisma-client-js"
+}
+
+model Scenario {
+  id        Int      @id @default(autoincrement())
+  scenario  String
+  result    String
+  feedback  String?
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
 }
