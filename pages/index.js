@@ -1,41 +1,58 @@
-// pages/index.js
-import { useState, useRef, useEffect } from "react";
+"use client";
+
+import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
-  const [scenario, setScenario] = useState("");
   const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const bottomRef = useRef(null);
+  const [persona, setPersona] = useState("General");
+  const messagesEndRef = useRef(null);
 
+  // Auto-scroll to bottom whenever messages change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleAnalyze = async () => {
-    if (!scenario.trim()) return;
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
     setLoading(true);
     setError("");
 
-    setMessages((prev) => [...prev, { role: "user", content: scenario }]);
-    setScenario("");
+    // Add user message
+    setMessages((prev) => [...prev, { role: "user", text: input }]);
+    const userInput = input;
+    setInput("");
 
     try {
-      const resp = await fetch("/api/analyze", {
+      const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario }),
+        body: JSON.stringify({ scenario: userInput, persona }),
       });
 
-      const data = await resp.json();
+      if (!res.ok) throw new Error("API error");
 
-      if (resp.ok) {
-        setMessages((prev) => [...prev, { role: "ai", content: data.analysis }]);
-      } else {
-        setError(data.error || "Unknown error");
+      // Placeholder for streaming response
+      setMessages((prev) => [...prev, { role: "assistant", text: "" }]);
+      let fullResponse = "";
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        fullResponse += chunk;
+        setMessages((prev) =>
+          prev.map((msg, idx) =>
+            idx === prev.length - 1 ? { ...msg, text: fullResponse } : msg
+          )
+        );
       }
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.error(err);
       setError("Failed to fetch AI response");
     } finally {
       setLoading(false);
@@ -45,67 +62,82 @@ export default function Home() {
   return (
     <div className="page">
       <div className="app-container">
-        <h1>💡 Life Coach AI</h1>
+        <h1>💡 AI Life Coach</h1>
 
+        {/* Persona selector */}
+        <div className="persona-selector">
+          <select
+            value={persona}
+            onChange={(e) => setPersona(e.target.value)}
+          >
+            <option value="General">General Coach</option>
+            <option value="Career">Career Coach</option>
+            <option value="Finance">Finance Coach</option>
+            <option value="Health">Health Coach</option>
+          </select>
+        </div>
+
+        {/* Chat window */}
         <div className="chat-window">
           {messages.map((msg, idx) => (
-            <div key={idx} className={`chat-bubble ${msg.role}`}>
-              {msg.content}
+            <div
+              key={idx}
+              className={`chat-bubble ${msg.role}`}
+            >
+              {msg.text}
             </div>
           ))}
-          <div ref={bottomRef} />
+          <div ref={messagesEndRef} />
         </div>
 
         {error && <p className="error">{error}</p>}
 
+        {/* Input area */}
         <div className="input-area">
           <textarea
             rows={2}
-            placeholder="Type your situation..."
-            value={scenario}
-            onChange={(e) => setScenario(e.target.value)}
+            placeholder="Type your scenario..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
           />
-          <button onClick={handleAnalyze} disabled={loading}>
+          <button onClick={handleSubmit} disabled={loading}>
             {loading ? "Thinking..." : "Send"}
           </button>
         </div>
       </div>
 
+      {/* Styles */}
       <style jsx>{`
-        body, html {
-          margin: 0;
-          padding: 0;
-        }
-
         .page {
           height: 100vh;
-          background: linear-gradient(135deg, #667eea, #764ba2);
           display: flex;
           justify-content: center;
           align-items: center;
+          background: linear-gradient(135deg, #667eea, #764ba2);
           font-family: 'Inter', sans-serif;
         }
-
         .app-container {
           width: 600px;
           max-width: 90%;
           background: #1f1f2f;
           border-radius: 20px;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
           padding: 20px;
           display: flex;
           flex-direction: column;
         }
-
         h1 {
-          text-align: center;
           color: #fff;
-          margin-bottom: 20px;
-          font-weight: 600;
+          text-align: center;
+          margin-bottom: 15px;
         }
-
+        .persona-selector {
+          margin-bottom: 10px;
+          text-align: center;
+        }
         .chat-window {
           flex: 1;
+          min-height: 350px;
+          max-height: 500px;
           overflow-y: auto;
           padding: 15px;
           background: #2b2b3b;
@@ -113,80 +145,56 @@ export default function Home() {
           display: flex;
           flex-direction: column;
           gap: 10px;
-          min-height: 350px;
-          max-height: 500px;
         }
-
         .chat-bubble {
           padding: 12px 18px;
           border-radius: 20px;
-          max-width: 80%;
+          max-width: 75%;
           word-wrap: break-word;
-          font-size: 15px;
-          box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         }
-
         .chat-bubble.user {
           align-self: flex-end;
           background: linear-gradient(135deg, #6a11cb, #2575fc);
           color: #fff;
           border-bottom-right-radius: 4px;
         }
-
-        .chat-bubble.ai {
+        .chat-bubble.assistant {
           align-self: flex-start;
           background: linear-gradient(135deg, #434343, #5e5e6a);
           color: #f0f0f0;
           border-bottom-left-radius: 4px;
         }
-
         .input-area {
           display: flex;
-          margin-top: 15px;
           gap: 10px;
+          margin-top: 15px;
         }
-
         textarea {
           flex: 1;
           padding: 12px;
           border-radius: 16px;
           border: none;
-          background: #2b2b3b;
-          color: #fff;
-          font-size: 16px;
-          resize: none;
           outline: none;
+          resize: none;
+          font-size: 16px;
         }
-
-        textarea::placeholder {
-          color: #aaa;
-        }
-
         button {
           background: linear-gradient(135deg, #6a11cb, #2575fc);
           border: none;
           border-radius: 16px;
           padding: 0 25px;
-          font-weight: bold;
           color: white;
+          font-weight: bold;
           cursor: pointer;
-          transition: all 0.3s ease;
         }
-
-        button:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-        }
-
         button:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
-
         .error {
           color: #ff6b6b;
-          margin-top: 10px;
           text-align: center;
+          margin-top: 10px;
         }
       `}</style>
     </div>
