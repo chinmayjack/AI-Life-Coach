@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { scenario, persona, userId } = req.body; // userId optional
+    const { scenario, persona, userId } = req.body;
 
     // 1️⃣ Create a new conversation
     const conversation = await prisma.conversation.create({
@@ -28,40 +28,28 @@ export default async function handler(req, res) {
       },
     });
 
-    // 3️⃣ Stream AI response
+    // 3️⃣ Get AI response (non-streaming)
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: `You are acting as a ${persona} coach.` },
         { role: "user", content: scenario },
       ],
-      stream: true,
     });
 
-    res.writeHead(200, {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-    });
-    res.flushHeaders();
-
-    let fullResponse = "";
-
-    for await (const event of completion) {
-      const content = event.choices?.[0]?.delta?.content || "";
-      res.write(content);
-      fullResponse += content;
-    }
+    const aiText = completion.choices[0].message.content;
 
     // 4️⃣ Save AI response
     await prisma.message.create({
       data: {
         role: "assistant",
-        content: fullResponse,
+        content: aiText,
         conversationId: conversation.id,
       },
     });
 
-    res.end();
+    // 5️⃣ Return AI response as JSON
+    res.status(200).json({ text: aiText });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
