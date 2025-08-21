@@ -1,3 +1,4 @@
+// pages/api/analyze.js
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
 
@@ -5,17 +6,20 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { scenario, persona } = req.body;
+    const { scenario, persona, userId } = req.body; // userId optional
 
-    // 1. Create conversation row
+    // 1️⃣ Create a new conversation
     const conversation = await prisma.conversation.create({
-      data: { persona },
+      data: {
+        persona,
+        userId: userId || null,
+      },
     });
 
-    // 2. Save user message
+    // 2️⃣ Save user message
     await prisma.message.create({
       data: {
         role: "user",
@@ -24,7 +28,7 @@ export default async function handler(req, res) {
       },
     });
 
-    // 3. Stream AI response
+    // 3️⃣ Stream AI response
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -48,7 +52,7 @@ export default async function handler(req, res) {
       fullResponse += content;
     }
 
-    // 4. Save AI response
+    // 4️⃣ Save AI response
     await prisma.message.create({
       data: {
         role: "assistant",
