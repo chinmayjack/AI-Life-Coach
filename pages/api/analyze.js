@@ -72,7 +72,7 @@ export default async function handler(req, res) {
     console.error("API ERROR:", err);
     // Don’t send JSON mid-stream — just plain text
     if (!res.headersSent) {
-      res.status(500).send("Internal server error");
+      res.status(500).send("Internal server error" + err.message);
     }
   } finally {
     // ⚠️ Don't disconnect too early — let Prisma pool persist
