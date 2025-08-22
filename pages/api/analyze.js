@@ -2,23 +2,30 @@
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
 
-export const config = {
-  runtime: "nodejs", // Important: use Node.js, not Edge
-};
+// Ensure Node runtime on Vercel
+export const config = { runtime: "nodejs" };
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
     const { scenario, persona, userId } = req.body;
 
+    if (!scenario || !persona) {
+      return res.status(400).json({ error: "Missing scenario or persona" });
+    }
+
     // 1️⃣ Create a conversation
     const conversation = await prisma.conversation.create({
-      data: { persona, userId: userId || null },
+      data: {
+        persona,
+        userId: userId || null,
+      },
     });
 
     // 2️⃣ Save user message
@@ -30,16 +37,16 @@ export default async function handler(req, res) {
       },
     });
 
-    // 3️⃣ Get AI response (non-streaming for Vercel)
+    // 3️⃣ Call OpenAI (non-streaming)
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini", // change if needed
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: `You are a ${persona} coach.` },
         { role: "user", content: scenario },
       ],
     });
 
-    const aiResponse = completion.choices[0].message.content;
+    const aiResponse = completion.choices[0]?.message?.content || "No response";
 
     // 4️⃣ Save AI response
     await prisma.message.create({
@@ -50,19 +57,16 @@ export default async function handler(req, res) {
       },
     });
 
-    // ✅ Send response to frontend
+    // 5️⃣ Return AI response to frontend
     res.status(200).json({ response: aiResponse });
   } catch (err) {
-    console.error("🔥 API ERROR:", err);
+    console.error("🔥 API ERROR FULL:", err);
+
     const message =
       err instanceof Error
-        ? `${err.name}: ${err.message}`
+        ? `${err.name}: ${err.message}\n${err.stack}`
         : JSON.stringify(err, null, 2);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Internal server error", details: message });
-    }
-  } finally {
-    // Don't disconnect Prisma in Vercel; it handles connection pooling
-    // await prisma.$disconnect();
+
+    res.status(500).json({ error: "Internal server error", details: message });
   }
 }
