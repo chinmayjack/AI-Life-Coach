@@ -1,3 +1,4 @@
+// pages/api/analyze.js
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
 
@@ -13,50 +14,71 @@ export default async function handler(req) {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const { scenario, persona, userId } = await req.json();
+  try {
+    const { scenario, persona, userId } = await req.json();
 
-  // Create conversation
-  const conversation = await prisma.conversation.create({
-    data: { persona, userId: userId || null },
-  });
+    // 1️⃣ Create conversation
+    const conversation = await prisma.conversation.create({
+      data: { persona, userId: userId || null },
+    });
 
-  // Save user message
-  await prisma.message.create({
-    data: { role: "user", content: scenario, conversationId: conversation.id },
-  });
+    // 2️⃣ Save user message
+    await prisma.message.create({
+      data: { role: "user", content: scenario, conversationId: conversation.id },
+    });
 
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: `You are acting as a ${persona} coach.` },
-      { role: "user", content: scenario },
-    ],
-    stream: true,
-  });
+    // 3️⃣ Create AI stream
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: `You are acting as a ${persona} coach.` },
+        { role: "user", content: scenario },
+      ],
+      stream: true,
+    });
 
-  let fullResponse = "";
+    let fullResponse = "";
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of completion) {
-        const content = chunk.choices[0]?.delta?.content || "";
-        controller.enqueue(new TextEncoder().encode(content));
-        fullResponse += content;
-      }
-      controller.close();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
 
-      // Save AI response after stream ends
-      await prisma.message.create({
-        data: {
-          role: "assistant",
-          content: fullResponse,
-          conversationId: conversation.id,
-        },
-      });
-    },
-  });
+        try {
+          for await (const chunk of completion) {
+            const content = chunk.choices?.[0]?.delta?.content || "";
+            if (content) {
+              controller.enqueue(encoder.encode(content));
+              fullResponse += content;
+            }
+          }
+        } catch (err) {
+          console.error("Streaming error:", err);
+          controller.error(err);
+        } finally {
+          controller.close();
 
-  return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+          // 4️⃣ Save AI response once streaming is done
+          await prisma.message.create({
+            data: {
+              role: "assistant",
+              content: fullResponse,
+              conversationId: conversation.id,
+            },
+          });
+
+          await prisma.$disconnect();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch (err) {
+    console.error("Handler error:", err);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 }
