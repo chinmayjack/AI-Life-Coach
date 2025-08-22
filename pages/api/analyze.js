@@ -1,4 +1,9 @@
 // pages/api/analyze.js
+export const config = {
+  api: {
+    bodyParser: true,
+  },
+};
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
 
