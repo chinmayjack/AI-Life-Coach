@@ -1,18 +1,10 @@
 datasource db {
-  provider = "postgresql" // Use "postgresql" for production
-  url      = env("DATABASE_URL") // Local: file:./dev.db
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
-}
-
-model Scenario {
-  id        Int      @id @default(autoincrement())
-  scenario  String
-  result    String
-  feedback  String?
-  createdAt DateTime @default(now())
 }
 
 model User {
@@ -20,7 +12,7 @@ model User {
   name          String
   email         String         @unique
   createdAt     DateTime       @default(now())
-  conversations Conversation[] // optional: link user to conversations
+  conversations Conversation[]
 }
 
 model Conversation {
