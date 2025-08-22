@@ -29,7 +29,7 @@ export default function Home() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario: userInput, persona }),
+        body: JSON.stringify({ scenario, persona, userId }),
       });
 
       if (!res.ok) throw new Error("API error");
