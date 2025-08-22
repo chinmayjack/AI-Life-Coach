@@ -1,202 +1,99 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
+// pages/index.js
+import { useState } from "react";
 
 export default function Home() {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
+  const [scenario, setScenario] = useState("");
+  const [persona, setPersona] = useState("life");
+  const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [persona, setPersona] = useState("General");
-  const messagesEndRef = useRef(null);
 
-  // Auto-scroll to bottom whenever messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleSubmit = async () => {
-    if (!input.trim()) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setResponse("");
     setLoading(true);
-    setError("");
-
-    // Add user message
-    setMessages((prev) => [...prev, { role: "user", text: input }]);
-    const userInput = input;
-    setInput("");
 
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario, persona, userId }),
+        body: JSON.stringify({ scenario, persona }),
       });
 
-      if (!res.ok) throw new Error("API error");
+      if (!res.body) {
+        throw new Error("No response body");
+      }
 
-      // Placeholder for streaming response
-      setMessages((prev) => [...prev, { role: "assistant", text: "" }]);
-      let fullResponse = "";
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
+      let result = "";
+
       while (true) {
-        const { value, done } = await reader.read();
+        const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        fullResponse += chunk;
-        setMessages((prev) =>
-          prev.map((msg, idx) =>
-            idx === prev.length - 1 ? { ...msg, text: fullResponse } : msg
-          )
-        );
+
+        const chunk = decoder.decode(value, { stream: true });
+        result += chunk;
+        setResponse((prev) => prev + chunk); // live update
       }
+
+      console.log("Final AI response:", result);
     } catch (err) {
-      console.error(err);
-      setError("Failed to fetch AI response");
+      console.error("Fetch error:", err);
+      setResponse("❌ Failed to fetch AI response.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="page">
-      <div className="app-container">
-        <h1>💡 AI Life Coach</h1>
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
+      <h1 className="text-3xl font-bold mb-6">AI Life Coach</h1>
 
-        {/* Persona selector */}
-        <div className="persona-selector">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-lg bg-white p-6 rounded-2xl shadow-md"
+      >
+        <label className="block mb-4">
+          <span className="font-medium">Choose Persona:</span>
           <select
             value={persona}
             onChange={(e) => setPersona(e.target.value)}
+            className="w-full mt-1 p-2 border rounded-md"
           >
-            <option value="General">General Coach</option>
-            <option value="Career">Career Coach</option>
-            <option value="Finance">Finance Coach</option>
-            <option value="Health">Health Coach</option>
+            <option value="life">Life Coach</option>
+            <option value="career">Career Coach</option>
+            <option value="fitness">Fitness Coach</option>
+            <option value="finance">Finance Coach</option>
           </select>
-        </div>
+        </label>
 
-        {/* Chat window */}
-        <div className="chat-window">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`chat-bubble ${msg.role}`}
-            >
-              {msg.text}
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {error && <p className="error">{error}</p>}
-
-        {/* Input area */}
-        <div className="input-area">
+        <label className="block mb-4">
+          <span className="font-medium">Your Scenario:</span>
           <textarea
-            rows={2}
-            placeholder="Type your scenario..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+            value={scenario}
+            onChange={(e) => setScenario(e.target.value)}
+            className="w-full mt-1 p-2 border rounded-md"
+            rows="4"
+            placeholder="Type your situation here..."
           />
-          <button onClick={handleSubmit} disabled={loading}>
-            {loading ? "Thinking..." : "Send"}
-          </button>
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Thinking..." : "Ask Coach"}
+        </button>
+      </form>
+
+      <div className="w-full max-w-lg mt-6 bg-white p-6 rounded-2xl shadow-md">
+        <h2 className="text-xl font-semibold mb-2">Coach Response:</h2>
+        <div className="whitespace-pre-wrap text-gray-800">
+          {response || "No response yet."}
         </div>
       </div>
-
-      {/* Styles */}
-      <style jsx>{`
-        .page {
-          height: 100vh;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          background: linear-gradient(135deg, #667eea, #764ba2);
-          font-family: 'Inter', sans-serif;
-        }
-        .app-container {
-          width: 600px;
-          max-width: 90%;
-          background: #1f1f2f;
-          border-radius: 20px;
-          padding: 20px;
-          display: flex;
-          flex-direction: column;
-        }
-        h1 {
-          color: #fff;
-          text-align: center;
-          margin-bottom: 15px;
-        }
-        .persona-selector {
-          margin-bottom: 10px;
-          text-align: center;
-        }
-        .chat-window {
-          flex: 1;
-          min-height: 350px;
-          max-height: 500px;
-          overflow-y: auto;
-          padding: 15px;
-          background: #2b2b3b;
-          border-radius: 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .chat-bubble {
-          padding: 12px 18px;
-          border-radius: 20px;
-          max-width: 75%;
-          word-wrap: break-word;
-        }
-        .chat-bubble.user {
-          align-self: flex-end;
-          background: linear-gradient(135deg, #6a11cb, #2575fc);
-          color: #fff;
-          border-bottom-right-radius: 4px;
-        }
-        .chat-bubble.assistant {
-          align-self: flex-start;
-          background: linear-gradient(135deg, #434343, #5e5e6a);
-          color: #f0f0f0;
-          border-bottom-left-radius: 4px;
-        }
-        .input-area {
-          display: flex;
-          gap: 10px;
-          margin-top: 15px;
-        }
-        textarea {
-          flex: 1;
-          padding: 12px;
-          border-radius: 16px;
-          border: none;
-          outline: none;
-          resize: none;
-          font-size: 16px;
-        }
-        button {
-          background: linear-gradient(135deg, #6a11cb, #2575fc);
-          border: none;
-          border-radius: 16px;
-          padding: 0 25px;
-          color: white;
-          font-weight: bold;
-          cursor: pointer;
-        }
-        button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-        .error {
-          color: #ff6b6b;
-          text-align: center;
-          margin-top: 10px;
-        }
-      `}</style>
     </div>
   );
 }
