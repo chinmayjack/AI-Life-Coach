@@ -1,9 +1,4 @@
 // pages/api/analyze.js
-export const config = {
-  api: {
-    bodyParser: true,
-  },
-};
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
 
@@ -15,11 +10,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { scenario, persona, userId } = req.body;
+    const { scenario, persona, userId } = req.body; // userId optional
 
-    // 1️⃣ Create conversation
+    // 1️⃣ Create a new conversation
     const conversation = await prisma.conversation.create({
-      data: { persona, userId: userId || null },
+      data: {
+        persona,
+        userId: userId || null,
+      },
     });
 
     // 2️⃣ Save user message
@@ -31,56 +29,41 @@ export default async function handler(req, res) {
       },
     });
 
-    // 3️⃣ Set headers for streaming
-    res.writeHead(200, {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-      Connection: "keep-alive",
-    });
-
-    let fullResponse = "";
-
-    // 4️⃣ Stream AI response
+    // 3️⃣ Get AI response (non-streaming)
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      stream: true,
+      model: "gpt-4o-mini", // fallback later if needed
       messages: [
         { role: "system", content: `You are acting as a ${persona} coach.` },
         { role: "user", content: scenario },
       ],
     });
 
-    for await (const event of completion) {
-      const content = event.choices?.[0]?.delta?.content || "";
-      if (content) {
-        res.write(content);
-        fullResponse += content;
-      }
-    }
+    const aiResponse = completion.choices[0].message.content;
 
-    // 5️⃣ Save assistant reply (after stream ends)
+    // 4️⃣ Save AI response
     await prisma.message.create({
       data: {
         role: "assistant",
-        content: fullResponse,
+        content: aiResponse,
         conversationId: conversation.id,
       },
     });
 
-    res.end();
+    // ✅ Return AI response directly
+    res.status(200).json({ response: aiResponse });
   } catch (err) {
-    console.error("API ERROR:", err);
-    // Don’t send JSON mid-stream — just plain text
-    const message = 
+    console.error("🔥 API ERROR FULL:", err);
+    const message =
       err instanceof Error
-      ? '${err.name}: {err.message}\n${err.stack}'
-      : JSON.stringify(err, null, 2);
-    
+        ? `${err.name}: ${err.message}\n${err.stack}`
+        : JSON.stringify(err, null, 2);
+
     if (!res.headersSent) {
-      res.status(500).send("Internal server error" + err.message);
+      res
+        .status(500)
+        .json({ error: "Internal server error", details: message });
     }
   } finally {
-    // ⚠️ Don't disconnect too early — let Prisma pool persist
-    // await prisma.$disconnect();  // REMOVE this in API routes
+    await prisma.$disconnect();
   }
 }
