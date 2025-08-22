@@ -1,99 +1,178 @@
-// pages/index.js
-import { useState } from "react";
+"use client";
+
+import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
-  const [scenario, setScenario] = useState("");
-  const [persona, setPersona] = useState("life");
-  const [response, setResponse] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [persona, setPersona] = useState("General");
+  const messagesEndRef = useRef(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setResponse("");
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
     setLoading(true);
+    setError("");
+
+    setMessages((prev) => [...prev, { role: "user", text: input }]);
+    const userInput = input;
+    setInput("");
 
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario, persona }),
+        body: JSON.stringify({ scenario: userInput, persona }),
       });
 
-      if (!res.body) {
-        throw new Error("No response body");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "API error");
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      let result = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        result += chunk;
-        setResponse((prev) => prev + chunk); // live update
-      }
-
-      console.log("Final AI response:", result);
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "assistant", text: data.response }]);
     } catch (err) {
-      console.error("Fetch error:", err);
-      setResponse("❌ Failed to fetch AI response.");
+      console.error(err);
+      setError("Failed to fetch AI response");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
-      <h1 className="text-3xl font-bold mb-6">AI Life Coach</h1>
+    <div className="page">
+      <div className="app-container">
+        <h1>💡 AI Life Coach</h1>
 
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-lg bg-white p-6 rounded-2xl shadow-md"
-      >
-        <label className="block mb-4">
-          <span className="font-medium">Choose Persona:</span>
-          <select
-            value={persona}
-            onChange={(e) => setPersona(e.target.value)}
-            className="w-full mt-1 p-2 border rounded-md"
-          >
-            <option value="life">Life Coach</option>
-            <option value="career">Career Coach</option>
-            <option value="fitness">Fitness Coach</option>
-            <option value="finance">Finance Coach</option>
+        <div className="persona-selector">
+          <select value={persona} onChange={(e) => setPersona(e.target.value)}>
+            <option value="General">General Coach</option>
+            <option value="Career">Career Coach</option>
+            <option value="Finance">Finance Coach</option>
+            <option value="Health">Health Coach</option>
           </select>
-        </label>
+        </div>
 
-        <label className="block mb-4">
-          <span className="font-medium">Your Scenario:</span>
+        <div className="chat-window">
+          {messages.map((msg, idx) => (
+            <div key={idx} className={`chat-bubble ${msg.role}`}>
+              {msg.text}
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="input-area">
           <textarea
-            value={scenario}
-            onChange={(e) => setScenario(e.target.value)}
-            className="w-full mt-1 p-2 border rounded-md"
-            rows="4"
-            placeholder="Type your situation here..."
+            rows={2}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your scenario..."
           />
-        </label>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "Thinking..." : "Ask Coach"}
-        </button>
-      </form>
-
-      <div className="w-full max-w-lg mt-6 bg-white p-6 rounded-2xl shadow-md">
-        <h2 className="text-xl font-semibold mb-2">Coach Response:</h2>
-        <div className="whitespace-pre-wrap text-gray-800">
-          {response || "No response yet."}
+          <button onClick={handleSubmit} disabled={loading}>
+            {loading ? "Thinking..." : "Send"}
+          </button>
         </div>
       </div>
+
+      <style jsx>{`
+        .page {
+          min-height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          font-family: 'Inter', sans-serif;
+        }
+        .app-container {
+          width: 600px;
+          max-width: 90%;
+          background: #1f1f2f;
+          border-radius: 20px;
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+        }
+        h1 {
+          color: #fff;
+          text-align: center;
+          margin-bottom: 15px;
+        }
+        .persona-selector {
+          margin-bottom: 10px;
+          text-align: center;
+        }
+        .chat-window {
+          flex: 1;
+          min-height: 350px;
+          max-height: 500px;
+          overflow-y: auto;
+          padding: 15px;
+          background: #2b2b3b;
+          border-radius: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .chat-bubble {
+          padding: 12px 18px;
+          border-radius: 20px;
+          max-width: 75%;
+          word-wrap: break-word;
+        }
+        .chat-bubble.user {
+          align-self: flex-end;
+          background: linear-gradient(135deg, #6a11cb, #2575fc);
+          color: #fff;
+          border-bottom-right-radius: 4px;
+        }
+        .chat-bubble.assistant {
+          align-self: flex-start;
+          background: linear-gradient(135deg, #434343, #5e5e6a);
+          color: #f0f0f0;
+          border-bottom-left-radius: 4px;
+        }
+        .input-area {
+          display: flex;
+          gap: 10px;
+          margin-top: 15px;
+        }
+        textarea {
+          flex: 1;
+          padding: 12px;
+          border-radius: 16px;
+          border: none;
+          outline: none;
+          resize: none;
+          font-size: 16px;
+        }
+        button {
+          background: linear-gradient(135deg, #6a11cb, #2575fc);
+          border: none;
+          border-radius: 16px;
+          padding: 0 25px;
+          color: white;
+          font-weight: bold;
+          cursor: pointer;
+        }
+        button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .error {
+          color: #ff6b6b;
+          text-align: center;
+          margin-top: 10px;
+        }
+      `}</style>
     </div>
   );
 }
