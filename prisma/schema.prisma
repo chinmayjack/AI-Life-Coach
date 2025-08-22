@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite" // Use "postgresql" for production
+  provider = "postgresql" // Use "postgresql" for production
   url      = env("DATABASE_URL") // Local: file:./dev.db
 }
 
