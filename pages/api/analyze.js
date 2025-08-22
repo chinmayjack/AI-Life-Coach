@@ -71,6 +71,11 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error("API ERROR:", err);
     // Don’t send JSON mid-stream — just plain text
+    const message = 
+      err instanceof Error
+      ? '${err.name}: {err.message}\n${err.stack}'
+      : JSON.stringify(err, null, 2);
+    
     if (!res.headersSent) {
       res.status(500).send("Internal server error" + err.message);
     }
